@@ -1,0 +1,5 @@
+numpy==1.21.6
+PyAudio==0.2.11
+scipy==1.8.0
+SoundFile==0.10.3.post1
+statsmodels==0.13.2
