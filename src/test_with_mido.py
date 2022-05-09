@@ -7,24 +7,26 @@ import numpy as np
 import mido
 
 # Native-Python Libraries
-import queue
-import threading
-import time
 
-class RepeatTimer(threading.Timer):  
-    def run(self):  
-        while not self.finished.wait(self.interval):  
-            self.function(*self.args,**self.kwargs)
+def output_callback(in_data, frame_count, time_info, status):
+    global out_data
+    return (out_data.astype(np.float32).tobytes(), pyaudio.paContinue)
 
-def on_output_frame(in_data, frame_count, time_info, status):
-    global output_queue
-    while output_queue.empty() == True:
+def input_callback(in_data, frame_count, time_info, status):
+    global v, excitation_frame, excitation_consumed, out_data
+    while excitation_consumed == True:
         pass
-    out_frame = output_queue.get()
-    return (out_frame.astype(np.float32).tobytes(), pyaudio.paContinue)
-
-def on_input_frame(in_data, frame_count, time_info, status):
-    voice_queue.put(np.frombuffer(in_data, dtype=np.float32))
+    if excitation_consumed == False:
+        excitation_consumed = True
+    # TODO Estimate the processing time to ensure there is no extra latency
+    # TODO The excitation is limited to white gaussian noise
+    # TODO We could select different types of inputs, such as MIDI
+    out_data = v.process_frame(
+        np.frombuffer(in_data, dtype=np.float32),
+        excitation_frame, # np.random.normal(0, 0.01, size=FRAME_SIZE)
+    )
+    # TODO The user could be asked to record the output and save it as a WAV
+    # TODO The user may want to send the output to a virtual microphone
     return (in_data, pyaudio.paContinue)
 
 # Parameters needed to configure the streams
@@ -32,7 +34,7 @@ SAMPLE_RATE = 48000
 CHANNELS = 1
 SAMPLE_WIDTH_IN_BYTES = 4
 ORDER = 48
-FRAME_TIME = 20e-3
+FRAME_TIME = 50e-3
 FRAME_SIZE = int(FRAME_TIME * SAMPLE_RATE)
 
 # Initializations
@@ -59,7 +61,7 @@ input_stream = p.open(
     output=False,
     frames_per_buffer=FRAME_SIZE,
     input_device_index=default_input_device['index'],
-    stream_callback=on_input_frame
+    stream_callback=input_callback
 )
 input_stream.start_stream()
 
@@ -75,7 +77,7 @@ output_stream = p.open(
     output=True,
     frames_per_buffer=FRAME_SIZE,
     output_device_index=default_output_device['index'],
-    stream_callback=on_output_frame
+    stream_callback=output_callback
 )
 output_stream.start_stream()
 
@@ -84,34 +86,37 @@ output_stream.start_stream()
 # TODO Instead of choosing the default input (the first one) let the user choose
 input_devices = mido.get_input_names()
 input_port = mido.open_input()
-
-# Create the needed queues
-voice_queue = queue.Queue()
-excitation_queue = queue.Queue()
-output_queue = queue.Queue()
-
-def excitation_generator(excitation_queue):
-    excitation_queue.put(np.random.normal(0, 0.01, size=FRAME_SIZE))
-
-timer = RepeatTimer(10e-3, excitation_generator, [excitation_queue])
-timer.start()
+excitation_frame = np.zeros((FRAME_SIZE), dtype=np.float32)
+out_data = np.zeros((FRAME_SIZE), dtype=np.float32)
+amplitude = 0
+frequency = 0
+last_time = 0
+excitation_consumed = True
 
 # TODO Create a better user interface (not necessarily graphical)
 # TODO Is it necessary to have a GUI?
 while True:
     try:
-        if voice_queue.empty() == False and excitation_queue.empty() == False:
-            voice_frame = voice_queue.get()
-            excitation_frame = excitation_queue.get()
-            output_frame = v.process_frame(
-                voice_frame,
-                excitation_frame
-            )
-            output_queue.put(output_frame)
+        for message in input_port.iter_pending():
+            if message.type == 'note_on':
+                note = message.note
+                amplitude = 1
+                frequency = 440 * (2**((note - 69) / 12))
+                count = 0
+                print(f'Start note of {frequency} Hz')
+            elif message.type == 'note_off':
+                print(f'Stop note of {frequency} Hz')
+                amplitude = 0
+                frequency = 0
+                count = 0
+
+        if excitation_consumed == True:
+            excitation_time = np.linspace(0, FRAME_SIZE-1, FRAME_SIZE) / SAMPLE_RATE + last_time
+            last_time = excitation_time[-1]
+            excitation_frame = amplitude * np.sin(2 * np.pi * frequency * excitation_time)
+            excitation_consumed = False
     except KeyboardInterrupt:
         break
-    
-timer.cancel()
 
 # Close MIDI ports
 input_port.close()
