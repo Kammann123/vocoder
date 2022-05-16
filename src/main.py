@@ -27,12 +27,12 @@ SAMPLE_RATE = 48000
 CHANNELS = 1
 SAMPLE_WIDTH_IN_BYTES = 4
 ORDER = 48
-FRAME_TIME = 100e-3                              # Audio Buffer Duration
+FRAME_TIME = 60e-3                              # Audio Buffer Duration
 FRAME_SIZE = int(FRAME_TIME * SAMPLE_RATE)
 WINDOW_TIME = 20e-3                              # Vocoder Processing Duration
 WINDOW_SIZE = int(WINDOW_TIME * SAMPLE_RATE)
 PRE_EMPHASIS = 0.97
-VOICE_THRESHOLD_dB = -30
+VOICE_THRESHOLD_dB = -40
 
 # Initializations
 p = pyaudio.PyAudio()                                               # PyAudio Instance
@@ -105,12 +105,13 @@ while True:
             voice_windows = np.split(voice_frame, FRAME_SIZE // WINDOW_SIZE)
             excitation_windows = np.split(excitation, FRAME_SIZE // WINDOW_SIZE)
             for index, voice_window in enumerate(voice_windows):
-                voice_level = 20 * np.log10(voice_window.std())
-                excitation_window = excitation_windows[index] if voice_level > VOICE_THRESHOLD_dB else np.zeros(WINDOW_SIZE)
+                voice_level = voice_window.std()
+                voice_level_dB = 20 * np.log10(voice_level)
+                excitation_window = excitation_windows[index] if voice_level_dB > VOICE_THRESHOLD_dB else np.zeros(WINDOW_SIZE)
                 output_window = v.process_frame(
                     voice_window,
-                    np.random.normal(0, 0.01, size=WINDOW_SIZE),
-                    #excitation_window,
+                    #np.random.normal(0, 0.03, size=WINDOW_SIZE),
+                    excitation_window,
                 )
                 output_frame[index * WINDOW_SIZE:(index + 1) * WINDOW_SIZE] = output_window
             output_queue.put(output_frame)
