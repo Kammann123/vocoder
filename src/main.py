@@ -49,6 +49,7 @@ excitation_queue = queue.Queue()
 # other available devices
 devices_count = p.get_device_count()
 devices_info = [p.get_device_info_by_index(i) for i in range(devices_count)]
+virtual_mic = list(filter(lambda device: device['name'] == "CABLE Input (VB-Audio Virtual C", devices_info))[0]
 default_input_device = p.get_default_input_device_info()
 default_output_device = p.get_default_output_device_info()
 
@@ -76,7 +77,8 @@ output_stream = p.open(
     input=False,
     output=True,
     frames_per_buffer=FRAME_SIZE,
-    output_device_index=default_output_device['index'],
+    output_device_index=virtual_mic['index'],
+    # output_device_index=default_output_device['index'],
     stream_callback=on_output_frame
 )
 
