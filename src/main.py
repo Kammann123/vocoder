@@ -5,6 +5,7 @@ import vocoder
 import pyaudio
 import numpy as np
 import mido
+from scipy import signal
 
 # Native-Python Libraries
 import queue
@@ -38,6 +39,7 @@ v = vocoder.Vocoder(WINDOW_SIZE, ORDER)         # Vocoder Instance
 # Create the needed queues
 voice_queue = queue.Queue()
 output_queue = queue.Queue()
+excitation_queue = queue.Queue()
 
 # Fetch devices' information and parameters from the PyAudio API, we can select
 # to use the default input/output devices or allow the user to choose some of the 
@@ -82,19 +84,41 @@ output_queue.put(np.zeros((FRAME_SIZE), dtype=np.float32))
 input_stream.start_stream()
 output_stream.start_stream()
 
+# DIRTY CODE (Quick And Dirty Style)
+excitation_frame = np.zeros((FRAME_SIZE * 3), dtype=np.float32)
+STEP_SIZE = int(0.5 * FRAME_SIZE)
+amplitude = 0.001
+frequency = 100
+i = 0
+
 while True:
     try:
-        if voice_queue.empty() == False:
+        if voice_queue.empty() == False and excitation_queue.empty() == False:
             voice_frame = voice_queue.get()
+            excitation = excitation_queue.get()
             output_frame = np.zeros(voice_frame.shape, dtype=np.float32)
             voice_windows = np.split(voice_frame, FRAME_SIZE // WINDOW_SIZE)
+            excitation_windows = np.split(excitation, FRAME_SIZE // WINDOW_SIZE)
             for index, voice_window in enumerate(voice_windows):
                 output_window = v.process_frame(
                     voice_window,
-                    np.random.normal(0, 0.01, size=WINDOW_SIZE)
+                    excitation_windows[index], #np.random.normal(0, 0.01, size=WINDOW_SIZE)
                 )
                 output_frame[index * WINDOW_SIZE:(index + 1) * WINDOW_SIZE] = output_window
             output_queue.put(output_frame)
+        elif excitation_queue.empty() == True:
+            excitation_queue.put(excitation_frame[:FRAME_SIZE])
+            excitation_frame = np.roll(excitation_frame, -FRAME_SIZE)
+            
+            excitation_frame[FRAME_SIZE*2:] = np.zeros(FRAME_SIZE, dtype=np.float32)
+
+            excitation_time = np.arange(FRAME_SIZE) / SAMPLE_RATE + i * STEP_SIZE / SAMPLE_RATE
+            i = i + 1
+            excitation_frame[FRAME_SIZE // 2 + FRAME_SIZE : FRAME_SIZE // 2 + FRAME_SIZE * 2] += amplitude * signal.square(2 * np.pi * frequency * excitation_time) * signal.windows.hann(FRAME_SIZE)
+
+            excitation_time = np.arange(FRAME_SIZE) / SAMPLE_RATE + i * STEP_SIZE / SAMPLE_RATE
+            i = i + 1
+            excitation_frame[FRAME_SIZE * 2:] += amplitude * signal.square(2 * np.pi * frequency * excitation_time) * signal.windows.hann(FRAME_SIZE)
     except KeyboardInterrupt:
         break
 

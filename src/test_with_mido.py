@@ -94,11 +94,11 @@ while True:
 
             excitation_time = np.arange(FRAME_SIZE) / SAMPLE_RATE + i * STEP_SIZE / SAMPLE_RATE
             i = i + 1
-            excitation_frame[FRAME_SIZE // 2 + FRAME_SIZE : FRAME_SIZE // 2 + FRAME_SIZE * 2] += amplitude * np.sin(2 * np.pi * frequency * excitation_time) * signal.windows.hann(FRAME_SIZE)
+            excitation_frame[FRAME_SIZE // 2 + FRAME_SIZE : FRAME_SIZE // 2 + FRAME_SIZE * 2] += amplitude * signal.square(2 * np.pi * frequency * excitation_time) * signal.windows.hann(FRAME_SIZE)
 
             excitation_time = np.arange(FRAME_SIZE) / SAMPLE_RATE + i * STEP_SIZE / SAMPLE_RATE
             i = i + 1
-            excitation_frame[FRAME_SIZE * 2:] += amplitude * np.sin(2 * np.pi * frequency * excitation_time) * signal.windows.hann(FRAME_SIZE)
+            excitation_frame[FRAME_SIZE * 2:] += amplitude * signal.square(2 * np.pi * frequency * excitation_time) * signal.windows.hann(FRAME_SIZE)
 
             excitation_consumed = False
     except KeyboardInterrupt:
