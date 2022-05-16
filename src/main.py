@@ -27,15 +27,17 @@ SAMPLE_RATE = 48000
 CHANNELS = 1
 SAMPLE_WIDTH_IN_BYTES = 4
 ORDER = 48
-FRAME_TIME = 80e-3                              # Audio Buffer Duration
+FRAME_TIME = 100e-3                              # Audio Buffer Duration
 FRAME_SIZE = int(FRAME_TIME * SAMPLE_RATE)
-WINDOW_TIME = 10e-3                             # Vocoder Processing Duration
+WINDOW_TIME = 20e-3                              # Vocoder Processing Duration
 WINDOW_SIZE = int(WINDOW_TIME * SAMPLE_RATE)
+PRE_EMPHASIS = 0.97
+VOICE_THRESHOLD_dB = -30
 
 # Initializations
-p = pyaudio.PyAudio()                                   # PyAudio Instance
-v = vocoder.Vocoder(WINDOW_SIZE, ORDER)                 # Vocoder Instance
-s = synthesizer.Synthesizer(FRAME_SIZE, SAMPLE_RATE)    # Synthesizer Instance
+p = pyaudio.PyAudio()                                               # PyAudio Instance
+v = vocoder.Vocoder(WINDOW_SIZE, ORDER, PRE_EMPHASIS)               # Vocoder Instance
+s = synthesizer.Synthesizer(FRAME_SIZE, SAMPLE_RATE)                # Synthesizer Instance
 
 # Create the needed queues
 voice_queue = queue.Queue()
@@ -103,9 +105,12 @@ while True:
             voice_windows = np.split(voice_frame, FRAME_SIZE // WINDOW_SIZE)
             excitation_windows = np.split(excitation, FRAME_SIZE // WINDOW_SIZE)
             for index, voice_window in enumerate(voice_windows):
+                voice_level = 20 * np.log10(voice_window.std())
+                excitation_window = excitation_windows[index] if voice_level > VOICE_THRESHOLD_dB else np.zeros(WINDOW_SIZE)
                 output_window = v.process_frame(
                     voice_window,
-                    excitation_windows[index] if voice_window.std() > 0.006 else np.zeros(WINDOW_SIZE), #np.random.normal(0, 0.01, size=WINDOW_SIZE)
+                    np.random.normal(0, 0.01, size=WINDOW_SIZE),
+                    #excitation_window,
                 )
                 output_frame[index * WINDOW_SIZE:(index + 1) * WINDOW_SIZE] = output_window
             output_queue.put(output_frame)
@@ -116,7 +121,7 @@ while True:
         for message in input_port.iter_pending():
             if message.type == 'note_on':
                 s.set_frequency(440 * (2**((message.note - 69) / 12)))
-                s.set_amplitude(0.003)
+                s.set_amplitude(0.008)
             elif message.type == 'note_off':
                 s.set_frequency(0.0)
                 s.set_amplitude(0.0)

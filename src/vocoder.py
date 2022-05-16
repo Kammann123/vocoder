@@ -2,17 +2,20 @@
 import numpy as np
 from scipy import signal
 from statsmodels.tsa import stattools
+import librosa
 
 class Vocoder:
 
-    def __init__(self, frame_size: int, order: int):
+    def __init__(self, frame_size: int, order: int, alpha: float):
         """ Initializes the Vocoder instance.
             :param frame_size: Size of the frames
             :param order: Order of the articulatory filter whose parameters will be estimated
+            :param alpha: Pre-emphasis filter coefficient
         """
         # Save the parameters of the vocoder
         self.frame_size = frame_size
         self.order = order
+        self.alpha = alpha
         # Stores the previous input window and has space to insert the new window 
         # to simplify how the math is taken during the processing (when the overlapped
         # window is needed)
@@ -53,14 +56,16 @@ class Vocoder:
         self.y[self.frame_size // 2:self.frame_size // 2 + self.frame_size] += self.vocode_frame(
             self.x[self.frame_size // 2:self.frame_size // 2 + self.frame_size],
             self.excitation[self.frame_size // 2:self.frame_size // 2 + self.frame_size],
-            self.order
+            self.order,
+            self.alpha
         )
 
         # Process the current window
         self.y[self.frame_size:] += self.vocode_frame(
             self.x[self.frame_size:],
             self.excitation[self.frame_size:],
-            self.order
+            self.order,
+            self.alpha
         )
 
         # Return the frame that is ready after this processing cycle
@@ -71,16 +76,18 @@ class Vocoder:
     def vocode_frame(
         voice_frame: np.array, 
         excitation_frame: np.array, 
-        order: int, 
+        order: int,
+        alpha: float = 0.97,
         apply_filter: bool = True, 
         apply_window: bool = True,
-        normalize_correlation: bool = False
+        normalize_correlation: bool = True
     ) -> np.array:
         """ Applies the vocoder processing algorithm to one frame or window, extracting the model parameters from the voice sequence
             and replacing the voice's generator with the given artificial excitation.
             :param voice_frame: Voice samples
             :param excitation_frame: Excitation samples
             :param order: Order of the articulatory model whose parameters are to be estimated
+            :param alpha: Pre-emphasis high-pass filter coefficient
             :param apply_filter: If false, the output will be directly the excitation frame (without filtering).
             :param apply_window: If false, the output will not have the window applied.
             :param normalize_correlation: If true, the correlation is normalized
@@ -92,6 +99,11 @@ class Vocoder:
         
         # Get the frame size
         frame_size = len(voice_frame)
+
+        # Apply a pre-emphasis filter to the voice signal to remove
+        # the effect of the glotal pulses produces by the vocal chords
+        voice_frame = librosa.effects.preemphasis(voice_frame, coef=alpha)
+        #signal.lfilter([1.0, -alpha], [1.0], voice_frame)
 
         # Estimate the short-time autocorrelation of the given data
         # TODO Use different sizes for each window in the autocorrelation to mitigate bias
