@@ -1,11 +1,11 @@
 # Custom Libraries
 import vocoder
+import synthesizer
 
 # Third-Party Libraries
 import pyaudio
 import numpy as np
 import mido
-from scipy import signal
 
 # Native-Python Libraries
 import queue
@@ -33,8 +33,9 @@ WINDOW_TIME = 10e-3                             # Vocoder Processing Duration
 WINDOW_SIZE = int(WINDOW_TIME * SAMPLE_RATE)
 
 # Initializations
-p = pyaudio.PyAudio()                           # PyAudio Instance
-v = vocoder.Vocoder(WINDOW_SIZE, ORDER)         # Vocoder Instance
+p = pyaudio.PyAudio()                                   # PyAudio Instance
+v = vocoder.Vocoder(WINDOW_SIZE, ORDER)                 # Vocoder Instance
+s = synthesizer.Synthesizer(FRAME_SIZE, SAMPLE_RATE)    # Synthesizer Instance
 
 # Create the needed queues
 voice_queue = queue.Queue()
@@ -77,19 +78,21 @@ output_stream = p.open(
     stream_callback=on_output_frame
 )
 
+# Using the MIDO library we can get what MIDI inputs are connected to the
+# system and use any of them to open a MIDI connection.
+input_devices = mido.get_input_names()
+input_port = mido.open_input()
+
 # Initialize the output queue
 output_queue.put(np.zeros((FRAME_SIZE), dtype=np.float32))
+
+# Start the synthesizer
+s.set_frequency(0.0)
+s.set_amplitude(0.0)
 
 # Start the streams
 input_stream.start_stream()
 output_stream.start_stream()
-
-# DIRTY CODE (Quick And Dirty Style)
-excitation_frame = np.zeros((FRAME_SIZE * 3), dtype=np.float32)
-STEP_SIZE = int(0.5 * FRAME_SIZE)
-amplitude = 0.001
-frequency = 100
-i = 0
 
 while True:
     try:
@@ -102,23 +105,22 @@ while True:
             for index, voice_window in enumerate(voice_windows):
                 output_window = v.process_frame(
                     voice_window,
-                    excitation_windows[index], #np.random.normal(0, 0.01, size=WINDOW_SIZE)
+                    excitation_windows[index] if voice_window.std() > 0.006 else np.zeros(WINDOW_SIZE), #np.random.normal(0, 0.01, size=WINDOW_SIZE)
                 )
                 output_frame[index * WINDOW_SIZE:(index + 1) * WINDOW_SIZE] = output_window
             output_queue.put(output_frame)
         elif excitation_queue.empty() == True:
-            excitation_queue.put(excitation_frame[:FRAME_SIZE])
-            excitation_frame = np.roll(excitation_frame, -FRAME_SIZE)
+            generated_frame = s.generate_frame()
+            excitation_queue.put(generated_frame)
             
-            excitation_frame[FRAME_SIZE*2:] = np.zeros(FRAME_SIZE, dtype=np.float32)
-
-            excitation_time = np.arange(FRAME_SIZE) / SAMPLE_RATE + i * STEP_SIZE / SAMPLE_RATE
-            i = i + 1
-            excitation_frame[FRAME_SIZE // 2 + FRAME_SIZE : FRAME_SIZE // 2 + FRAME_SIZE * 2] += amplitude * signal.square(2 * np.pi * frequency * excitation_time) * signal.windows.hann(FRAME_SIZE)
-
-            excitation_time = np.arange(FRAME_SIZE) / SAMPLE_RATE + i * STEP_SIZE / SAMPLE_RATE
-            i = i + 1
-            excitation_frame[FRAME_SIZE * 2:] += amplitude * signal.square(2 * np.pi * frequency * excitation_time) * signal.windows.hann(FRAME_SIZE)
+        for message in input_port.iter_pending():
+            if message.type == 'note_on':
+                s.set_frequency(440 * (2**((message.note - 69) / 12)))
+                s.set_amplitude(0.003)
+            elif message.type == 'note_off':
+                s.set_frequency(0.0)
+                s.set_amplitude(0.0)
+                
     except KeyboardInterrupt:
         break
 

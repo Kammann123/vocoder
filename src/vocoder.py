@@ -1,3 +1,4 @@
+# Third-Party Libraries
 import numpy as np
 from scipy import signal
 from statsmodels.tsa import stattools
@@ -72,7 +73,8 @@ class Vocoder:
         excitation_frame: np.array, 
         order: int, 
         apply_filter: bool = True, 
-        apply_window: bool = True
+        apply_window: bool = True,
+        normalize_correlation: bool = False
     ) -> np.array:
         """ Applies the vocoder processing algorithm to one frame or window, extracting the model parameters from the voice sequence
             and replacing the voice's generator with the given artificial excitation.
@@ -81,6 +83,7 @@ class Vocoder:
             :param order: Order of the articulatory model whose parameters are to be estimated
             :param apply_filter: If false, the output will be directly the excitation frame (without filtering).
             :param apply_window: If false, the output will not have the window applied.
+            :param normalize_correlation: If true, the correlation is normalized
             :return: The vocoded frame
         """
         # Verify if both the voice and the excitation frames have the same length
@@ -95,7 +98,9 @@ class Vocoder:
         rxx = signal.correlate(voice_frame, voice_frame, method='fft')
 
         # Extract only the needed lags
-        rxx = rxx[len(rxx) // 2 : len(rxx) // 2 + order + 1] / rxx[0]
+        rxx = rxx[len(rxx) // 2 : len(rxx) // 2 + order + 1]
+        if normalize_correlation == True:
+            rxx /= rxx[0]
 
         # Use the Levinson-Durbin algorithm to find the error filter coefficients
         _, ao, _, J, _ = stattools.levinson_durbin(rxx, nlags=len(rxx)-1, isacov=True)
