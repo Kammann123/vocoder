@@ -11,10 +11,11 @@ import queue
 
 def on_output_frame(in_data, frame_count, time_info, status):
     global output_queue
-    while output_queue.empty() == True:
-        pass
-    out_frame = output_queue.get()
-    return (out_frame.astype(np.float32).tobytes(), pyaudio.paContinue)
+    if output_queue.empty() == True:
+        buffer = np.zeros((FRAME_SIZE), dtype=np.float32)
+    else:
+        buffer = output_queue.get()
+    return (buffer.astype(np.float32).tobytes(), pyaudio.paContinue)
 
 def on_input_frame(in_data, frame_count, time_info, status):
     voice_queue.put(np.frombuffer(in_data, dtype=np.float32))
@@ -74,6 +75,10 @@ output_stream = p.open(
     stream_callback=on_output_frame
 )
 
+# Initialize the output queue
+output_queue.put(np.zeros((FRAME_SIZE), dtype=np.float32))
+
+# Start the streams
 input_stream.start_stream()
 output_stream.start_stream()
 
@@ -82,7 +87,7 @@ while True:
         if voice_queue.empty() == False:
             voice_frame = voice_queue.get()
             output_frame = np.zeros(voice_frame.shape, dtype=np.float32)
-            voice_windows = np.split(voice_frame, 8)
+            voice_windows = np.split(voice_frame, FRAME_SIZE // WINDOW_SIZE)
             for index, voice_window in enumerate(voice_windows):
                 output_window = v.process_frame(
                     voice_window,
