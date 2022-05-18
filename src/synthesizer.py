@@ -45,6 +45,14 @@ class Synthesizer:
         result = self.notes_playing.pop(frequency, None)
         return result != None
 
+    def SincM(self, x, M):
+        """ SincM function from: https://ccrma.stanford.edu/~stilti/papers/blit.pdf
+            :param x: Array of x values
+            :param M: Number of harmonics to preserve
+            :return: Array containing the resulting waveform
+        """
+        return np.sin(np.pi*x) / (M * np.sin(np.pi*x / M))
+
     def generate_waveform(self, time: np.array) -> np.array:
         """ Generates a waveform from the currently playing notes at the specified times
             :param time: Array of time samples
@@ -52,7 +60,11 @@ class Synthesizer:
         """
         waveform = np.zeros_like(time)
         for freq, amp in self.notes_playing.items():
-            waveform += amp * signal.square(2 * np.pi * freq * time)
+            #waveform += amp * signal.square(2 * np.pi * freq * time)
+
+            P = self.sample_rate / freq
+            M = 2 * P//2 + 1
+            waveform += amp * (M/P)*self.SincM((M/P) * time / self.sample_rate)
         return waveform
     
     def generate_frame(self):
