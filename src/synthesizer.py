@@ -15,28 +15,45 @@ class Synthesizer:
         self.frame_size = frame_size
         self.sample_rate = sample_rate
         self.step_size = int(0.5 * frame_size)
-        self.amplitude = 0.0
-        self.frequency = 0.0
         self.step_index = 0
 
         # Buffer instantiation
         self.frames = np.zeros((frame_size * 3), dtype=np.float32)
+
+        self.notes_playing = dict()
     
-    def set_amplitude(self, amplitude: float):
-        """ Sets the waveform's amplitude
+    def note_on(self, amplitude: float, frequency: float):
+        """ Adds a new note to the dictionary of currently playing notes
             :param amplitude: Amplitude of the waveform
+            :param frequency: Fundamental frequency of the waveform
         """
         if amplitude < 0.0:
             raise ValueError('The amplitude has to be a positive number')
-        self.amplitude = amplitude
+        if frequency < 0.0:
+            raise ValueError('Invalid negative frequency value')
+        frequency = round(frequency, 3)     # Round float to get reliable comparisons
+        self.notes_playing[frequency] = amplitude
     
-    def set_frequency(self, frequency: float):
-        """ Sets the waveform's fundamental frequency
+    def note_off(self, frequency: float) -> bool:
+        """ Removes note from the dictionary of currently playing notes
             :param frequency: Fundamental frequency of the waveform
+            :return: True if value was succesfully removed, False otherwise
         """
         if frequency < 0.0:
             raise ValueError('Invalid negative frequency value')
-        self.frequency = frequency
+        frequency = round(frequency, 3)     # Round float to get reliable comparisons
+        result = self.notes_playing.pop(frequency, None)
+        return result != None
+
+    def generate_waveform(self, time: np.array) -> np.array:
+        """ Generates a waveform from the currently playing notes at the specified times
+            :param time: Array of time samples
+            :return: Array containing the resulting waveform
+        """
+        waveform = np.zeros_like(time)
+        for freq, amp in self.notes_playing.items():
+            waveform += amp * signal.square(2 * np.pi * freq * time)
+        return waveform
     
     def generate_frame(self):
         """ Generates a new frame of the synthesized waveform
@@ -54,11 +71,11 @@ class Synthesizer:
 
         # Generates the overlapping samples of the waveform
         t = self._get_next_frame_time()
-        self.frames[self.frame_size // 2 + self.frame_size : self.frame_size // 2 + self.frame_size * 2] += self.amplitude * signal.square(2 * np.pi * self.frequency * t) * signal.windows.hann(self.frame_size)
+        self.frames[self.frame_size // 2 + self.frame_size : self.frame_size // 2 + self.frame_size * 2] += self.generate_waveform(t) * signal.windows.hann(self.frame_size)
 
         # Generates the non-overlapping samples of the new frame
         t = self._get_next_frame_time()
-        self.frames[self.frame_size * 2:] += self.amplitude * signal.square(2 * np.pi * self.frequency * t) * signal.windows.hann(self.frame_size)
+        self.frames[self.frame_size * 2:] += self.generate_waveform(t) * signal.windows.hann(self.frame_size)
 
         # Return the generated frame
         return generated_frame

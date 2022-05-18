@@ -67,10 +67,6 @@ def start_vocoder(input_device, output_device, midi_device):
     # Initialize the output queue
     output_queue.put(np.zeros((FRAME_SIZE), dtype=np.float32))
 
-    # Start the synthesizer
-    s.set_frequency(0.0)
-    s.set_amplitude(0.0)
-
     # Start the streams
     input_stream.start_stream()
     output_stream.start_stream()
@@ -100,7 +96,7 @@ FRAME_SIZE = int(FRAME_TIME * SAMPLE_RATE)
 WINDOW_TIME = 20e-3                              # Vocoder Processing Duration
 WINDOW_SIZE = int(WINDOW_TIME * SAMPLE_RATE)
 PRE_EMPHASIS = 0.97
-VOICE_THRESHOLD_dB = -50
+VOICE_THRESHOLD_dB = -60
 
 # Initializations
 p = pyaudio.PyAudio()                                               # PyAudio Instance
@@ -165,11 +161,9 @@ while True:
                 
             for message in input_port.iter_pending():
                 if message.type == 'note_on':
-                    s.set_frequency(440 * (2**((message.note - 69) / 12)))
-                    s.set_amplitude(0.008)
+                    s.note_on(0.008, 440 * (2**((message.note - 69) / 12)))
                 elif message.type == 'note_off':
-                    s.set_frequency(0.0)
-                    s.set_amplitude(0.0)
+                    s.note_off(440 * (2**((message.note - 69) / 12)))
                     
         except KeyboardInterrupt:
             break
