@@ -6,7 +6,7 @@ import numpy as np
 
 class Synthesizer:
 
-    def __init__(self, frame_size: int, sample_rate: int):
+    def __init__(self, frame_size: int, sample_rate: int, squarewave: bool=True):
         """ Initializes the Synthesizer instance
             :param frame_size: Size of the frames
             :param sample_rate: Sampling rate
@@ -21,6 +21,8 @@ class Synthesizer:
         self.frames = np.zeros((frame_size * 3), dtype=np.float32)
 
         self.notes_playing = dict()
+
+        self.squarewave = squarewave
     
     def note_on(self, amplitude: float, frequency: float):
         """ Adds a new note to the dictionary of currently playing notes
@@ -51,7 +53,8 @@ class Synthesizer:
             :param M: Number of harmonics to preserve
             :return: Array containing the resulting waveform
         """
-        return np.sin(np.pi*x) / (M * np.sin(np.pi*x / M))
+        sincm = lambda x: np.sin(np.pi*x) / (M * np.sin(np.pi*x / M))
+        return np.where( abs(np.sin(np.pi*x/M)) <= 1.0e-12, 1, sincm(x) )
 
     def generate_waveform(self, time: np.array) -> np.array:
         """ Generates a waveform from the currently playing notes at the specified times
@@ -60,11 +63,12 @@ class Synthesizer:
         """
         waveform = np.zeros_like(time)
         for freq, amp in self.notes_playing.items():
-            #waveform += amp * signal.square(2 * np.pi * freq * time)
-
-            P = self.sample_rate / freq
-            M = 2 * P//2 + 1
-            waveform += amp * (M/P)*self.SincM((M/P) * time / self.sample_rate)
+            if self.squarewave:
+                waveform += amp * signal.square(2 * np.pi * freq * time)
+            else:
+                P = self.sample_rate / freq
+                M = 2 * P//2 - 1
+                waveform += amp * (M/P)*self.SincM((M/P) * (time * self.sample_rate), M)
         return waveform
     
     def generate_frame(self):
