@@ -8,14 +8,16 @@ import threading
 
 # https://stackoverflow.com/a/1835036
 class App(threading.Thread):
-    def __init__(self, q, start_callback, stop_callback, input_list, output_list,midi_list, source_list,
+    def __init__(self, start_callback, stop_callback, volume_queue, threshold_queue, 
+                input_list, output_list,midi_list, source_list,
                 default_input = '(Seleccionar)', default_output = '(Seleccionar)'):
         threading.Thread.__init__(self)
 
-        self.q = q
-
         self.start_callback = start_callback
         self.stop_callback = stop_callback
+        self.volume_queue = volume_queue
+        self.threshold_queue = threshold_queue
+
         self.input_list = input_list
         self.output_list = output_list
         self.midi_list = midi_list
@@ -23,6 +25,9 @@ class App(threading.Thread):
 
         self.default_input = default_input
         self.default_output = default_output
+
+        self.volume_db = -100
+        self.threshold_db = -40
 
     def callback(self):
         self.root.quit()
@@ -109,6 +114,8 @@ class App(threading.Thread):
 
         frame = ttk.Frame(self.root)
         frame.grid(row=2, column=1)
+        frame.columnconfigure(0, weight=1, minsize=160)
+        frame.columnconfigure(1, weight=1, minsize=40)
 
         self.pb_frame = ttk.Frame(frame)
         self.pb_frame.grid(row=0, column=0)
@@ -121,33 +128,47 @@ class App(threading.Thread):
             mode='determinate',
             length=150
         )
-        self.pb_input_vol.pack()
+        self.pb_input_vol.pack(anchor="w")
 
-        self.lbl_input_vol = ttk.Label(master=self.lbl_frame, text=f"  0 dB")
-        self.lbl_input_vol.pack()
+        self.lbl_input_vol = ttk.Label(master=self.lbl_frame, text="  00 dB")
+        self.lbl_input_vol.pack(anchor="w")
 
 
         frame = ttk.Frame(self.root)
         frame.grid(row=3, column=1)
+        frame.columnconfigure(0, weight=1, minsize=160)
+        frame.columnconfigure(1, weight=1, minsize=40)
 
-        self.pb_frame = ttk.Frame(frame)
-        self.pb_frame.grid(row=0, column=0)
+        self.scl_frame = ttk.Frame(frame)
+        self.scl_frame.grid(row=0, column=0)
         self.lbl_frame = ttk.Frame(frame)
         self.lbl_frame.grid(row=0, column=1)
 
-        self.pb_source_vol = ttk.Progressbar(
-            self.pb_frame,
-            orient='horizontal',
-            mode='determinate',
-            length=150
+        self.lbl_threshold = ttk.Label(master=self.lbl_frame, text=f'  {self.threshold_db} dB')
+
+        self.scl_threshold = ttk.Scale(
+            self.scl_frame,
+            from_=-100,
+            to=0,
+            orient=tk.HORIZONTAL,
+            length=150,
+            command=lambda v: setattr(self, 'threshold_db', round(float(v)))
         )
-        self.pb_source_vol.pack()
+        self.scl_threshold.set(self.threshold_db)
+        self.scl_threshold.pack()
+        self.lbl_threshold.pack()
 
-        self.lbl_source_vol = ttk.Label(master=self.lbl_frame, text=f"  0 dB")
-        self.lbl_source_vol.pack()
-
+        self.root.after(100, self.periodicCall)
         self.root.mainloop()
 
+    def periodicCall(self):
+        self.threshold_queue.put(self.threshold_db)
+        self.lbl_threshold.config(text=f'  {self.threshold_db} dB')
+
+        while not self.volume_queue.empty():
+            self.volume_db = int(self.volume_queue.get())
+        self.set_input_volume(self.volume_db)
+        self.root.after(100, self.periodicCall)
 
     def toggle_audio_source(self):
         if self.btn_toggle_source.config('text')[-1] == 'Cambiar a entrada MIDI':
@@ -160,8 +181,6 @@ class App(threading.Thread):
             self.cb_source.config(state='readonly')
 
     def toggle_run(self):
-        self.q.put('Toggle Run')
-
         if self.btn_toggle_run.config('text')[-1] == 'Detener':
             self.btn_toggle_run.config(text='Iniciar')
             self.cb_input.config(state='readonly')
@@ -187,11 +206,7 @@ class App(threading.Thread):
 
     def set_input_volume(self, volume_db):
         self.lbl_input_vol.config(text=f'  {volume_db} dB')
-        self.pb_input_vol.config(value=100-volume_db)
-        
-    def set_source_volume(self, volume_db):
-        self.lbl_source_vol.config(text=f'  {volume_db} dB')
-        self.pb_source_vol.config(value=100-volume_db)
+        self.pb_input_vol.config(value=100+volume_db)
 
     def get_input_name(self):
         return self.str_input

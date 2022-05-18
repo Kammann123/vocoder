@@ -28,11 +28,6 @@ def on_input_frame(in_data, frame_count, time_info, status):
 def start_vocoder(input_device, output_device, midi_device):
     global input_stream, output_stream, input_port, output_queue, s, vocoder_running
 
-    print()
-    print(input_device)
-    print(output_device)
-    print(midi_device)
-
     # Choose a specific input device and create a stream to start reading
     # audio samples from it, using the non-blocking method (callback)
     selected_input_device = list(filter(lambda device: device['name'] == input_device, devices_info))[0]
@@ -96,7 +91,7 @@ FRAME_SIZE = int(FRAME_TIME * SAMPLE_RATE)
 WINDOW_TIME = 20e-3                              # Vocoder Processing Duration
 WINDOW_SIZE = int(WINDOW_TIME * SAMPLE_RATE)
 PRE_EMPHASIS = 0.97
-VOICE_THRESHOLD_dB = -60
+VOICE_THRESHOLD_dB = -40
 
 # Initializations
 p = pyaudio.PyAudio()                                               # PyAudio Instance
@@ -128,8 +123,9 @@ midi_devices = mido.get_input_names()
 input_list = [ device['name'] for device in filter(lambda device: device['maxInputChannels'] > 0, devices_info) ]
 output_list = [ device['name'] for device in filter(lambda device: device['maxOutputChannels'] > 0, devices_info) ]
 
-app_queue = queue.Queue()
-application = gui.App(  app_queue, start_vocoder, stop_vocoder,
+threshold_queue = queue.Queue()
+volume_queue = queue.Queue()
+application = gui.App(  start_vocoder, stop_vocoder, volume_queue, threshold_queue,
                         input_list, output_list, midi_devices, input_list,
                         default_input_device['name'], default_output_device['name']
                         )
@@ -138,6 +134,8 @@ application.start()
 while True:
     while vocoder_running == True:
         try:
+            if not threshold_queue.empty():
+                VOICE_THRESHOLD_dB = float(threshold_queue.get())
             if voice_queue.empty() == False and excitation_queue.empty() == False:
                 voice_frame = voice_queue.get()
                 excitation = excitation_queue.get()
@@ -154,6 +152,8 @@ while True:
                         excitation_window,
                     )
                     output_frame[index * WINDOW_SIZE:(index + 1) * WINDOW_SIZE] = output_window
+                    volume_queue.put(voice_level_dB)
+
                 output_queue.put(output_frame)
             elif excitation_queue.empty() == True:
                 generated_frame = s.generate_frame()
