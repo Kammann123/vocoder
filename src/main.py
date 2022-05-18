@@ -91,7 +91,8 @@ FRAME_SIZE = int(FRAME_TIME * SAMPLE_RATE)
 WINDOW_TIME = 20e-3                              # Vocoder Processing Duration
 WINDOW_SIZE = int(WINDOW_TIME * SAMPLE_RATE)
 PRE_EMPHASIS = 0.97
-VOICE_THRESHOLD_dB = -40
+voice_threshold_dB = -40
+synth_amplitude = 0.01
 
 # Initializations
 p = pyaudio.PyAudio()                                               # PyAudio Instance
@@ -123,9 +124,10 @@ midi_devices = mido.get_input_names()
 input_list = [ device['name'] for device in filter(lambda device: device['maxInputChannels'] > 0, devices_info) ]
 output_list = [ device['name'] for device in filter(lambda device: device['maxOutputChannels'] > 0, devices_info) ]
 
-threshold_queue = queue.Queue()
 volume_queue = queue.Queue()
-application = gui.App(  start_vocoder, stop_vocoder, volume_queue, threshold_queue,
+threshold_queue = queue.Queue()
+amplitude_queue = queue.Queue()
+application = gui.App(  start_vocoder, stop_vocoder, volume_queue, threshold_queue, amplitude_queue,
                         input_list, output_list, midi_devices, input_list,
                         default_input_device['name'], default_output_device['name']
                         )
@@ -135,7 +137,11 @@ while True:
     while vocoder_running == True:
         try:
             if not threshold_queue.empty():
-                VOICE_THRESHOLD_dB = float(threshold_queue.get())
+                voice_threshold_dB = float(threshold_queue.get())
+            if not amplitude_queue.empty():
+                # Logarithmic amplitude formula, new_amplitude goes from 0 to 10:
+                new_amplitude = float(amplitude_queue.get())
+                synth_amplitude = 0 if new_amplitude==0 else (10**((new_amplitude ) / 5 - 3))
             if voice_queue.empty() == False and excitation_queue.empty() == False:
                 voice_frame = voice_queue.get()
                 excitation = excitation_queue.get()
@@ -145,10 +151,9 @@ while True:
                 for index, voice_window in enumerate(voice_windows):
                     voice_level = voice_window.std()
                     voice_level_dB = 20 * np.log10(voice_level)
-                    excitation_window = excitation_windows[index] if voice_level_dB > VOICE_THRESHOLD_dB else np.zeros(WINDOW_SIZE)
+                    excitation_window = excitation_windows[index] if voice_level_dB > voice_threshold_dB else np.zeros(WINDOW_SIZE)
                     output_window = v.process_frame(
                         voice_window,
-                        #np.random.normal(0, 0.03, size=WINDOW_SIZE),
                         excitation_window,
                     )
                     output_frame[index * WINDOW_SIZE:(index + 1) * WINDOW_SIZE] = output_window
@@ -161,7 +166,7 @@ while True:
                 
             for message in input_port.iter_pending():
                 if message.type == 'note_on':
-                    s.note_on(0.008, 440 * (2**((message.note - 69) / 12)))
+                    s.note_on(synth_amplitude, 440 * (2**((message.note - 69) / 12)))
                 elif message.type == 'note_off':
                     s.note_off(440 * (2**((message.note - 69) / 12)))
                     

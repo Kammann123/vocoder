@@ -8,7 +8,8 @@ import threading
 
 # https://stackoverflow.com/a/1835036
 class App(threading.Thread):
-    def __init__(self, start_callback, stop_callback, volume_queue, threshold_queue, 
+    def __init__(self, start_callback, stop_callback,
+                volume_queue, threshold_queue, amplitude_queue, 
                 input_list, output_list,midi_list, source_list,
                 default_input = '(Seleccionar)', default_output = '(Seleccionar)'):
         threading.Thread.__init__(self)
@@ -17,6 +18,7 @@ class App(threading.Thread):
         self.stop_callback = stop_callback
         self.volume_queue = volume_queue
         self.threshold_queue = threshold_queue
+        self.amplitude_queue = amplitude_queue
 
         self.input_list = input_list
         self.output_list = output_list
@@ -28,6 +30,7 @@ class App(threading.Thread):
 
         self.volume_db = -100
         self.threshold_db = -40
+        self.amplitude = 5
 
     def callback(self):
         self.root.quit()
@@ -117,37 +120,21 @@ class App(threading.Thread):
         frame.columnconfigure(0, weight=1, minsize=160)
         frame.columnconfigure(1, weight=1, minsize=40)
 
-        self.pb_frame = ttk.Frame(frame)
-        self.pb_frame.grid(row=0, column=0)
-        self.lbl_frame = ttk.Frame(frame)
-        self.lbl_frame.grid(row=0, column=1)
+        title_frame = ttk.Frame(frame)
+        title_frame.grid(row=0, column=0)
 
-        self.pb_input_vol = ttk.Progressbar(
-            self.pb_frame,
-            orient='horizontal',
-            mode='determinate',
-            length=150
-        )
-        self.pb_input_vol.pack(anchor="w")
+        self.lbl_title_threshold = ttk.Label(title_frame, text=f"Umbral de volúmen de entrada:")
+        self.lbl_title_threshold.pack()
 
-        self.lbl_input_vol = ttk.Label(master=self.lbl_frame, text="  00 dB")
-        self.lbl_input_vol.pack(anchor="w")
+        scl_frame = ttk.Frame(frame)
+        scl_frame.grid(row=1, column=0)
+        lbl_frame = ttk.Frame(frame)
+        lbl_frame.grid(row=1, column=1)
 
-
-        frame = ttk.Frame(self.root)
-        frame.grid(row=3, column=1)
-        frame.columnconfigure(0, weight=1, minsize=160)
-        frame.columnconfigure(1, weight=1, minsize=40)
-
-        self.scl_frame = ttk.Frame(frame)
-        self.scl_frame.grid(row=0, column=0)
-        self.lbl_frame = ttk.Frame(frame)
-        self.lbl_frame.grid(row=0, column=1)
-
-        self.lbl_threshold = ttk.Label(master=self.lbl_frame, text=f'  {self.threshold_db} dB')
+        self.lbl_threshold = ttk.Label(lbl_frame, text=f'  {self.threshold_db} dB')
 
         self.scl_threshold = ttk.Scale(
-            self.scl_frame,
+            scl_frame,
             from_=-100,
             to=0,
             orient=tk.HORIZONTAL,
@@ -158,12 +145,63 @@ class App(threading.Thread):
         self.scl_threshold.pack()
         self.lbl_threshold.pack()
 
+        pb_frame = ttk.Frame(frame)
+        pb_frame.grid(row=2, column=0)
+        lbl_frame = ttk.Frame(frame)
+        lbl_frame.grid(row=2, column=1)
+
+        self.pb_input_vol = ttk.Progressbar(
+            pb_frame,
+            orient='horizontal',
+            mode='determinate',
+            length=150
+        )
+        self.pb_input_vol.pack(anchor="w")
+
+        self.lbl_input_vol = ttk.Label(master=lbl_frame, text="  00 dB")
+        self.lbl_input_vol.pack(anchor="w")
+
+
+        frame = ttk.Frame(self.root)
+        frame.grid(row=3, column=1)
+        frame.columnconfigure(0, weight=1, minsize=160)
+        frame.columnconfigure(1, weight=1, minsize=40)
+
+        title_frame = ttk.Frame(frame)
+        title_frame.grid(row=0, column=0)
+
+        lbl_title_amplitude = ttk.Label(title_frame, text=f"Volúmen de salida:")
+        lbl_title_amplitude.pack()
+
+        scl_frame = ttk.Frame(frame)
+        scl_frame.grid(row=1, column=0)
+        lbl_frame = ttk.Frame(frame)
+        lbl_frame.grid(row=1, column=1)
+
+        self.lbl_amplitude = ttk.Label(master=lbl_frame, text=f'  {self.amplitude}')
+
+        self.amplitude = tk.IntVar()
+        self.scl_amplitude = ttk.Scale(
+            scl_frame,
+            from_=0,
+            to=10,
+            value=5,
+            orient=tk.HORIZONTAL,
+            length=150,
+            variable=self.amplitude
+        )
+        self.scl_amplitude.set(5)
+        self.scl_amplitude.pack()
+        self.lbl_amplitude.pack()
+
         self.root.after(100, self.periodicCall)
         self.root.mainloop()
 
     def periodicCall(self):
         self.threshold_queue.put(self.threshold_db)
+        self.amplitude_queue.put(self.amplitude.get())
         self.lbl_threshold.config(text=f'  {self.threshold_db} dB')
+        self.lbl_amplitude.config(text=f'  {self.amplitude.get()}')
 
         while not self.volume_queue.empty():
             self.volume_db = int(self.volume_queue.get())
