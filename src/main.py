@@ -86,7 +86,7 @@ SAMPLE_RATE = 48000
 CHANNELS = 1
 SAMPLE_WIDTH_IN_BYTES = 4
 ORDER = 48
-FRAME_TIME = 60e-3                              # Audio Buffer Duration
+FRAME_TIME = 80e-3                              # Audio Buffer Duration
 FRAME_SIZE = int(FRAME_TIME * SAMPLE_RATE)
 WINDOW_TIME = 20e-3                              # Vocoder Processing Duration
 WINDOW_SIZE = int(WINDOW_TIME * SAMPLE_RATE)
@@ -151,7 +151,7 @@ while True:
                 for index, voice_window in enumerate(voice_windows):
                     voice_level = voice_window.std()
                     voice_level_dB = 20 * np.log10(voice_level)
-                    excitation_window = excitation_windows[index] if voice_level_dB > voice_threshold_dB else np.zeros(WINDOW_SIZE)
+                    excitation_window = excitation_windows[index]*voice_level*10 if voice_level_dB > voice_threshold_dB else np.zeros(WINDOW_SIZE)
                     output_window = v.process_frame(
                         voice_window,
                         excitation_window,
