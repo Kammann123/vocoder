@@ -47,7 +47,6 @@ class App(threading.Thread):
         self.root.rowconfigure(0, weight=1, minsize=75)
         self.root.rowconfigure(1, weight=1, minsize=75)
         self.root.rowconfigure(2, weight=1, minsize=75)
-        self.root.rowconfigure(3, weight=1, minsize=75)
 
         frame = ttk.Frame(self.root)
         frame.grid(row=0, column=0)
@@ -88,18 +87,6 @@ class App(threading.Thread):
         self.cb_midi.pack()
 
 
-        frame = ttk.Frame(self.root)
-        frame.grid(row=3, column=0)
-
-        self.lbl_source = ttk.Label(master=frame, text=f"Entrada de fuente de audio: ")
-        self.lbl_source.pack()
-
-        self.str_source = tk.StringVar(self.root)
-        self.str_source.set(self.default_input)
-        self.cb_source = ttk.Combobox(frame, textvariable=self.str_source, state="readonly", values=self.source_list)
-        self.cb_source.config(width=40, state='disable')
-        self.cb_source.pack()
-
 
         frame = ttk.Frame(self.root)
         frame.grid(row=0, column=1)
@@ -110,13 +97,6 @@ class App(threading.Thread):
 
         frame = ttk.Frame(self.root)
         frame.grid(row=1, column=1)
-
-        self.btn_toggle_source = ttk.Button(frame, text="Cambiar a fuente de audio", width=30, command=self.toggle_audio_source)
-        self.btn_toggle_source.pack()
-
-
-        frame = ttk.Frame(self.root)
-        frame.grid(row=2, column=1)
         frame.columnconfigure(0, weight=1, minsize=160)
         frame.columnconfigure(1, weight=1, minsize=40)
 
@@ -163,7 +143,7 @@ class App(threading.Thread):
 
 
         frame = ttk.Frame(self.root)
-        frame.grid(row=3, column=1)
+        frame.grid(row=2, column=1)
         frame.columnconfigure(0, weight=1, minsize=160)
         frame.columnconfigure(1, weight=1, minsize=40)
 
@@ -208,39 +188,14 @@ class App(threading.Thread):
         self.set_input_volume(self.volume_db)
         self.root.after(100, self.periodicCall)
 
-    def toggle_audio_source(self):
-        if self.btn_toggle_source.config('text')[-1] == 'Cambiar a entrada MIDI':
-            self.btn_toggle_source.config(text='Cambiar a fuente de audio')
-            self.cb_midi.config(state='readonly')
-            self.cb_source.config(state='disable')
-        else:
-            self.btn_toggle_source.config(text='Cambiar a entrada MIDI')
-            self.cb_midi.config(state='disable')
-            self.cb_source.config(state='readonly')
-
     def toggle_run(self):
-        if self.btn_toggle_run.config('text')[-1] == 'Detener':
-            self.btn_toggle_run.config(text='Iniciar')
-            self.cb_input.config(state='readonly')
-            self.cb_output.config(state='readonly')
-            self.btn_toggle_source.config(state='enable')
-            if self.btn_toggle_source.config('text')[-1] == 'Cambiar a entrada MIDI':
-                self.cb_midi.config(state='disable')
-                self.cb_source.config(state='readonly')
-            else:
-                self.cb_midi.config(state='readonly')
-                self.cb_source.config(state='disable')
+        self.btn_toggle_run.config(text='Corriendo...')
+        self.btn_toggle_run.config(state='disable')
+        self.cb_input.config(state='disable')
+        self.cb_output.config(state='disable')
+        self.cb_midi.config(state='disable')
 
-            self.stop_callback()
-        else:
-            self.btn_toggle_run.config(text='Detener')
-            self.btn_toggle_source.config(state='disable')
-            self.cb_input.config(state='disable')
-            self.cb_output.config(state='disable')
-            self.cb_midi.config(state='disable')
-            self.cb_source.config(state='disable')
-
-            self.start_callback(self.str_input.get(), self.str_output.get(), self.str_midi.get())
+        self.start_callback(self.str_input.get(), self.str_output.get(), self.str_midi.get())
 
     def set_input_volume(self, volume_db):
         self.lbl_input_vol.config(text=f'  {volume_db} dB')
