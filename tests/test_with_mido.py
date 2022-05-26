@@ -28,7 +28,6 @@ FRAME_SIZE = int(FRAME_TIME * SAMPLE_RATE)
 
 # Initializations
 p = pyaudio.PyAudio()                           # PyAudio Instance
-v = vocoder.Vocoder(FRAME_SIZE, ORDER)          # Vocoder Instance
 
 # Fetch devices' information and parameters from the PyAudio API, we can select
 # to use the default input/output devices or allow the user to choose some of the 
